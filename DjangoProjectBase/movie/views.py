@@ -7,6 +7,51 @@ import matplotlib.pyplot as plt
 import matplotlib
 import io
 import urllib, base64
+import os
+import numpy as np
+from django.views import View
+from openai import OpenAI
+from dotenv import load_dotenv
+
+# Cargar API key
+load_dotenv("../openAI.env")
+client = OpenAI(api_key=os.environ.get("openai_apikey"))
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+class RecommendMovieView(View):
+    template_name = "recommend.html"
+
+    def get(self, request):
+        return render(request, self.template_name)
+
+    def post(self, request):
+        prompt = request.POST.get("prompt")
+        best_movie, max_similarity = None, -1
+
+        if prompt:
+            # 🔎 Generar embedding del prompt
+            response = client.embeddings.create(
+                input=[prompt],
+                model="text-embedding-3-small"
+            )
+            prompt_emb = np.array(response.data[0].embedding, dtype=np.float32)
+
+            # 🔎 Recorrer todas las películas y calcular similitud
+            for movie in Movie.objects.all():
+                movie_emb = np.frombuffer(movie.emb, dtype=np.float32)
+                similarity = cosine_similarity(prompt_emb, movie_emb)
+
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    best_movie = movie
+
+        return render(request, self.template_name, {
+            "prompt": prompt,
+            "best_movie": best_movie,
+            "similarity": max_similarity
+        })
 
 def home(request):
     #return HttpResponse('<h1>Welcome to Home Page</h1>')
